@@ -5,6 +5,7 @@ import type {
   CommandExecutionItem,
   CommandExecutionStatus,
   FileChangeItem,
+  McpToolCallItem,
   PatchApplyStatus,
   ThreadItem,
   WebSearchAction,
@@ -60,14 +61,26 @@ describe("SDK item types match the exec JSONL wire format", () => {
 
   it("accepts the declined command execution status", () => {
     const statuses: CommandExecutionStatus[] = ["in_progress", "completed", "failed", "declined"];
-    const item: CommandExecutionItem = {
+    // Wire carries "exit_code": null while the command has not exited yet;
+    // the key is always present, never omitted.
+    const running: CommandExecutionItem = {
       id: "item_2",
       type: "command_execution",
       command: "rm -rf /",
       aggregated_output: "",
+      exit_code: null,
       status: "declined",
     };
-    expect(statuses).toContain(item.status);
+    const exited: CommandExecutionItem = {
+      id: "item_2b",
+      type: "command_execution",
+      command: "echo hi",
+      aggregated_output: "hi",
+      exit_code: 0,
+      status: "completed",
+    };
+    expect(statuses).toContain(running.status);
+    expect(exited.exit_code).toBe(0);
   });
 
   it("accepts the in_progress patch apply status", () => {
@@ -97,5 +110,34 @@ describe("SDK item types match the exec JSONL wire format", () => {
     };
     expect(actions).toHaveLength(4);
     expect(item.action.type).toBe("search");
+  });
+
+  it("treats result/error as always-present null until settled", () => {
+    // Rust's Option<i32> / Option<McpToolCallItemResult> with no
+    // skip_serializing_if serialize as `null` on the wire — the keys are
+    // present, not omitted. See exec_events.rs:164,291-292.
+    const inFlight: McpToolCallItem = {
+      id: "item_5",
+      type: "mcp_tool_call",
+      server: "example",
+      tool: "read",
+      arguments: {},
+      result: null,
+      error: null,
+      status: "in_progress",
+    };
+    const failed: McpToolCallItem = {
+      id: "item_6",
+      type: "mcp_tool_call",
+      server: "example",
+      tool: "read",
+      arguments: {},
+      result: null,
+      error: { message: "boom" },
+      status: "failed",
+    };
+    const item: ThreadItem = inFlight;
+    expect(item.type).toBe("mcp_tool_call");
+    expect(failed.error).not.toBeNull();
   });
 });

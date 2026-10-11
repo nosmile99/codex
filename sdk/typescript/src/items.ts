@@ -13,8 +13,12 @@ export type CommandExecutionItem = {
   command: string;
   /** Aggregated stdout and stderr captured while the command was running. */
   aggregated_output: string;
-  /** Set when the command exits; omitted while still running. */
-  exit_code?: number;
+  /**
+   * Always present on the wire; `null` while the command is still running.
+   * Note this is *not* omitted — check `exit_code == null`, not
+   * `exit_code === undefined`.
+   */
+  exit_code: number | null;
   /** Current status of the command execution. */
   status: CommandExecutionStatus;
 };
@@ -57,16 +61,22 @@ export type McpToolCallItem = {
   tool: string;
   /** Arguments forwarded to the tool invocation. */
   arguments: unknown;
-  /** Result payload returned by the MCP server for successful calls. */
-  result?: {
+  /**
+   * Result payload returned by the MCP server for successful calls.
+   * Always present on the wire; `null` until the call completes successfully.
+   */
+  result: {
     content: McpContentBlock[];
     _meta?: unknown;
     structured_content: unknown;
-  };
-  /** Error message reported for failed calls. */
-  error?: {
+  } | null;
+  /**
+   * Error message reported for failed calls.
+   * Always present on the wire; `null` until the call fails.
+   */
+  error: {
     message: string;
-  };
+  } | null;
   /** Current status of the tool invocation. */
   status: McpToolCallStatus;
 };
@@ -91,6 +101,12 @@ export type CollabAgentState = {
 /**
  * Represents a call to a collab tool (e.g. spawning a subagent). The item starts
  * when the collab tool is invoked and completes when it reports success or failure.
+ *
+ * The wire mapping is conditional: `SendMessage`, `FollowupTask`,
+ * `InterruptAgent`, `ListAgents` and `Interrupted` statuses are never emitted,
+ * and `ResumeAgent` is folded into `wait` — so the wire only ever carries
+ * `spawn_agent` / `send_input` / `wait` / `close_agent` with
+ * `in_progress` / `completed` / `failed`.
  */
 export type CollabToolCallItem = {
   id: string;
